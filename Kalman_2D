@@ -1,0 +1,72 @@
+import numpy as np
+from numpy.linalg import inv
+
+x_measured = np.array([61.91,60.96,62.38,60.96,60.96,63.34,63.34,62.86,63.34,61.91]) #Data- distance traveled
+y_measured = np.array([93.25,94.25,94.13,94.26,94.91,93.98,94.38,94.62,93.71,93.91]) #Data- HCSR04 Sensor
+
+z = np.c_[x_measured, y_measured]
+
+# Initial Conditions
+a = 0  
+y = 0
+t = 0  
+
+# Process / Estimation Errors
+error_est_x = 0
+error_est_y = 91
+
+# Observation Errors
+error_obs_x = .319084  # Uncertainty in the measurement
+error_obs_y = .147686
+
+def prediction2d(x, v, t, a):
+    A = np.array([[1, t],
+                  [0, 1]])
+    X = np.array([[x],
+                  [y])
+    B = np.array([[0.5 * t ** 2],
+                  [t]])
+    X_prime = A.dot(X) + B.dot(a)
+    return X_prime
+
+
+def covariance2d(sigma1, sigma2):
+    cov1_2 = sigma1 * sigma2
+    cov2_1 = sigma2 * sigma1
+    cov_matrix = np.array([[sigma1 ** 2, cov1_2],
+                           [cov2_1, sigma2 ** 2]])
+    return np.diag(np.diag(cov_matrix))
+
+
+# Initial Estimation Covariance Matrix
+P = covariance2d(error_est_x, error_est_y)
+A = np.array([[1, t],
+              [0, 1]])
+
+# Initial State Matrix
+X = np.array([[z[0][0]],
+              [y]])
+n = len(z[0])
+
+for data in z[1:]:
+    X = prediction2d(X[0][0], X[1][0], t, a)
+    P = np.diag(np.diag(A.dot(P).dot(A.T)))
+
+    # Calculating the Kalman Gain
+    H = np.identity(n)
+    R = covariance2d(error_obs_x, error_obs_y)
+    S = H.dot(P).dot(H.T) + R
+    K = P.dot(H).dot(inv(S))
+
+    # Reshape the new data into the measurement space.
+    Y = H.dot(data).reshape(n, -1)
+
+    # State Matrix
+    # Fused predicted state, measured values, covariance matrix and Kalman Gain
+
+    X = X + K.dot(Y - H.dot(X))
+
+    # Update Process Covariance Matrix
+    P = (np.identity(len(K)) - K.dot(H)).dot(P)
+
+print("Kalman Data:", X)
